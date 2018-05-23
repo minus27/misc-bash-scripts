@@ -1,0 +1,4 @@
+### Sample .curlrc file for simulating attacks to trigger WAF events
+-k
+-sXGET
+--url "https://REPLACE_WITH_YOUR_DOMAIN_TO_BE_ATTACKED?q='1'='1....rdtre..<script>alert('yes')</script>"

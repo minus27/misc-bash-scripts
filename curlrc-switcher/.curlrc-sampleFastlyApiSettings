@@ -1,0 +1,5 @@
+### Sample .curlrc file for making Fastly API calls
+-s
+-g
+-H "Fastly-Key: REPLACE_WITH_YOUR_FASTLY_API_KEY"
+-H "Accept: application/vnd.api+json"
