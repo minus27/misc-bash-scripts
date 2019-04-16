@@ -48,6 +48,8 @@ $
 ```
 
 ## Examples
+Note:  `$API_KEY`, `$CUSTOMER_ID`, and `$SERVICE_ID` are bash variables containing
+the Fastly API Key, Customer ID, and Service ID, respectively.
 ### 1) Typical execution, i.e. getting and processing all Service ID's for a Customer ID
 ```
 $ ./getServices $API_KEY $CUSTOMER_ID > service_list.csv
