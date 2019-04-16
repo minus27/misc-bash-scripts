@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+printBytes() { # $1 = #_OF_BYTES $2 = INCLUDE_BYTES
+	[[ "$1" =~ ^[0-9]+$ ]] || exitScript "ERROR" "Non-numeric or negative byte value: \"$1\""
+	LC_NUMERIC=en_US printf "%'.f" $1
+	[ "$2" == "" ] && echo "" || {
+		printf " byte"
+		[[ "$1" =~ ^[0-9]+$ ]] && {
+			[[ "$1" -ne 1 ]] && echo "s" || echo ""
+		} || echo ""
+	}
+}
+printAbbreviatedBytes() { # $1 = #_OF_BYTES
+	[[ "$1" =~ ^[0-9]+$ ]] || exitScript "ERROR" "Non-numeric or negative byte value: \"$1\""
+	BYTE_LENGTH="${#1}"
+	[ "$DEBUG" != "" ] && echo "DEBUG: Byte length of $1 = $BYTE_LENGTH"	
+	case "$BYTE_LENGTH" in
+		1|2|3) POWER=0; UNIT="";  ;;
+		4|5|6) POWER=1; UNIT="kilo";  ;;
+		7|8|9) POWER=2; UNIT="mega";  ;;
+		10|11|12) POWER=3; UNIT="giga";  ;;
+		13|14|15) POWER=4; UNIT="tera";  ;;
+		16|17|18) POWER=5; UNIT="peta";  ;;
+		*) exitScript "ERROR" "Byte value is ginormous and most likely causing overflow problems: $1"
+	esac
+	UNIT_ABBREVIATION="$(echo "$UNIT" | tr '[:lower:]' '[:upper:]' | sed -E 's/^(.).*/\1/')"
+	[ "$UNIT_ABBREVIATION" == "K" ] && UNIT_ABBREVIATION="k"
+	[ "$DEBUG" != "" ] && echo "DEBUG: Byte value will be prettyprinted in ${UNIT}bytes (${UNIT_ABBREVIATION}b), i.e. BYTES/(1000**$POWER)"
+	TEMP="$(echo "$1 / $((1000**$POWER))" | bc -l | sed -E 's/^(.*\....).*$/\1/' | sed -E 's/^\./0./' | sed -E 's/0*$//' | sed -E 's/\.$//')"
+	[ "$TEMP" == "" ] && TEMP="0"
+	echo "$TEMP ${UNIT_ABBREVIATION}b"
+}
+# Main Code Starts Here
+[[ "$#" -ne 4 ]] && {
+	echo "USAGE: $(echo $0 | sed -E 's#^.*/##') API_KEY FROM_DATE TO_DATE SERVICE_ID_FILE"
+	echo "       where FROM_DATE and TO_DATE are YYYY-MM-DD"
+	echo -e "\nNotes:"
+	echo "       1) The date range starts at FROM_DATE and goes through TO_DATE"
+	echo "       2) Lines starting with a \"#\" in SERVICE_ID_FILE are ignored"
+	echo
+	exit 1
+}
+SCRIPT_FILE="getBackendRequestBytes"
+API_KEY="$1"
+FROM_DATE="$2"
+TO_DATE="$3"
+SERVICE_ID_FILE="$4"
+[ -f "$SCRIPT_FILE" ] || {
+	echo "Script File \"$SCRIPT_FILE\" not found"
+	exit 1
+}
+[ -f "$SERVICE_ID_FILE" ] || {
+	echo "Service ID File \"$SERVICE_ID_FILE\" not found"
+	exit 1
+}
+FORMAT_WITH="%s,%s,%s,%s,%s\n"
+FORMAT_WITHOUT="%s,%s,%s,%s,%s\n"
+TOTAL_BYTES=0
+while read -r LINE
+do
+	[[ "$LINE" =~ ^# ]] && continue # Skip commented out lines in CSV file
+	[[ "$LINE" =~ , ]] && {
+		SERVICE_ID="$(echo "$LINE" | sed -E 's/,.*$//')"
+		SERVICE_NAME="$(echo "$LINE" | sed -E 's/^[^,]*,//')"
+		SERVICE_INFO="\"$SERVICE_ID\",\"$SERVICE_NAME\""
+	} || {
+		SERVICE_ID="$LINE"
+		SERVICE_INFO="\"$SERVICE_ID\""
+	}
+	[ "$HEADER_PRINTED" == "" ] && {
+		[ "$SERVICE_NAME" == "" ] && {
+			echo "\"Service ID\",\"Total Bytes\",\"Abbrev. Total Bytes\",\"Shielding?\""
+		} || {
+			echo "\"Service ID\",\"Service Name\",\"Total Bytes\",\"Abbrev. Total Bytes\",\"Shielding?\""
+		}
+		HEADER_PRINTED=1
+	}
+	BE_REQ_BYTES="$(./$SCRIPT_FILE $API_KEY $SERVICE_ID $FROM_DATE $TO_DATE)"
+	BE_REQ_BYTES_INFO="$(echo "$BE_REQ_BYTES"|sed -E 's/^[^,]+,//')"
+	TEMP_BYTES="$(echo "$BE_REQ_BYTES"|sed -E 's/,.*$//')"
+	TOTAL_BYTES=$((TOTAL_BYTES + TEMP_BYTES))
+	echo "$SERVICE_INFO,$BE_REQ_BYTES_INFO"
+done <<< "$(cat $SERVICE_ID_FILE)"
+echo -e "\n\"Total Traffic to Origin = $(printBytes $TOTAL_BYTES 1) ($(printAbbreviatedBytes $TOTAL_BYTES)) from $FROM_DATE to $TO_DATE\""
