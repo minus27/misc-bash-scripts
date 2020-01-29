@@ -6,7 +6,7 @@ tool_check() {
 exitScript() { # $1=EXIT_REASON $2=EXIT_DETAILS
 	[ "$1" == "USAGE" ] && {
 		[ "$2" != "" ] && echo -e "ERROR: $2\n"
-		echo -e "USAGE: $(echo $0 | sed -E 's#^.*/##') API_KEY SERVICE_ID FROM_DATE TO_DATE [--debug]"
+		echo -e "USAGE: $(echo $0 | sed -E 's#^.*/##') API_KEY SERVICE_ID FROM_DATE TO_DATE [--labels rows|cols] [--debug]"
 		echo -e "       where FROM_DATE and TO_DATE are YYYY-MM-DD\n"
 		echo -e "Note: The date range starts at FROM_DATE and goes through TO_DATE\n"
 		exit 1
@@ -91,6 +91,7 @@ getStatBytesForService() { #$1=FIELD_NAME
 	STAT_BYTES="$(echo "$OUTPUT" | jq --arg FIELD "$1" '[.data[]|.[$FIELD]]|add')"
 	[ "$STAT_BYTES" == "null" ] && STAT_BYTES=0
 	[ "$DEBUG" != "" ] && echo "DEBUG: Total \"$1\" bytes = \"$STAT_BYTES\""
+	echo "$OUTPUT" > "$1.json"
 }
 printBytes() { # $1 = #_OF_BYTES $2 = INCLUDE_BYTES
 	[[ "$1" =~ ^[0-9]+$ ]] || exitScript "ERROR" "Non-numeric or negative byte value: \"$1\""
@@ -120,7 +121,7 @@ printAbbreviatedBytes() { # $1 = #_OF_BYTES
 	[ "$DEBUG" != "" ] && echo "DEBUG: Byte value will be prettyprinted in ${UNIT}bytes (${UNIT_ABBREVIATION}b), i.e. BYTES/(1000**$POWER)"
 	TEMP="$(echo "$1 / $((1000**$POWER))" | bc -l | sed -E 's/^(.*\....).*$/\1/' | sed -E 's/^\./0./' | sed -E 's/0*$//' | sed -E 's/\.$//')"
 	[ "$TEMP" == "" ] && TEMP="0"
-	echo "$TEMP ${UNIT_ABBREVIATION}b"
+	echo "$TEMP ${UNIT_ABBREVIATION}B"
 }
 prettyPrintBytes() { # $1 = #_OF_BYTES
 	[[ "$1" =~ ^[0-9]+$ ]] || exitScript "ERROR" "Non-numeric or negative byte value: \"$1\""
@@ -129,11 +130,33 @@ prettyPrintBytes() { # $1 = #_OF_BYTES
 	echo "$BYTES ($ABBREV_BYTES)"
 }
 # Main Code Starts Here
+# https://stackoverflow.com/questions/192249/how-do-i-parse-command-line-arguments-in-bash
+POSITIONAL=()
+while [[ $# -gt 0 ]]
+do
+	key="$1"
+	case $key in
+		-d|--debug)
+			DEBUG="1"; shift ;;
+		-l|--labels)
+			LABELS="$2"; shift; shift ;;
+		-s|--stop)
+			STOP="1"; shift ;;
+		*)    # unknown option
+			POSITIONAL+=("$1"); shift ;;
+	esac
+done
+set -- "${POSITIONAL[@]}" # restore positional parameters
+#
 [[ "$#" -eq 0 ]] && exitScript "USAGE"
-[[ "$#" -lt 4 || "$#" -gt 5 ]] && exitScript "USAGE" "4 or 5 arguments expected and $# found"
-[[ "$#" -eq 5 ]] && {
-	[[ "$5" == "--debug" ]] && DEBUG="1" || exitScript "USAGE" "Unexpected argument found: \"$5\""
+[[ "$#" -ne 4 ]] && exitScript "USAGE" "4 arguments expected and $# found"
+[[ "$LABELS" != "" ]] && {
+	[[ ! "$LABELS" =~ ^r(ows?)?$ && ! "$LABELS" =~ ^c(ol((umn)?s?)?)?$ ]] && {
+		exitScript "USAGE" "Unexpected value in optional --labels argument: \"$LABELS\""
+	}
 }
+[[ "$STOP" != "" ]] && exitScript "INFO" "Script stopped by request"
+#
 tool_check
 checkApiKey $1
 checkServiceId $2
@@ -153,4 +176,12 @@ HEADER_BYTES="$STAT_BYTES"
 getStatBytesForService "bereq_body_bytes"
 BODY_BYTES="$STAT_BYTES"
 TOTAL_BYTES=$((HEADER_BYTES+BODY_BYTES))
-echo "$TOTAL_BYTES,\"$(printBytes "$TOTAL_BYTES")\",\"$(printAbbreviatedBytes $TOTAL_BYTES)\",\"$SHIELDING_FLAG\""
+[[ "$LABELS" =~ ^r(ows?)?$ ]] && {
+	echo "Total Bytes (Integer): $TOTAL_BYTES"
+	echo "Total Bytes (Separated): $(printBytes "$TOTAL_BYTES")"
+	echo "Total Bytes (Formatted): $(printAbbreviatedBytes $TOTAL_BYTES)"
+	echo "Shielding: $SHIELDING_FLAG"
+} || {
+	[[ "$LABELS" =~ ^c(ol((umn)?s?)?)?$ ]] && echo "\"Total Bytes (Integer)\",\"Total Bytes (Separated)\",\"Total Bytes (Formatted)\",\"Shielding\""
+	echo "$TOTAL_BYTES,\"$(printBytes "$TOTAL_BYTES")\",\"$(printAbbreviatedBytes $TOTAL_BYTES)\",\"$SHIELDING_FLAG\""
+}
