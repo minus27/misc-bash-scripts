@@ -51,11 +51,37 @@ $
 ## Examples
 Note:  `$API_KEY`, `$CUSTOMER_ID`, and `$SERVICE_ID` are bash variables containing
 the Fastly API Key, Customer ID, and Service ID, respectively.
+
+### 1.1) Getting the origin request bandwidth for a single Service ID (No Labels)
+```
+$ ./getBackendRequestBytes $API_KEY $SERVICE_ID 2019-01-01 2019-01-31
+26375472,"26,375,472","26.375 Mb","X"
+$
+```
+
+### 1.2) Getting the origin request bandwidth for a single Service ID (Column Labels)
+```
+$ ./getBackendRequestBytes $API_KEY $SERVICE_ID 2019-01-01 2019-01-31 --labels cols
+"Total Bytes (Integer)","Total Bytes (Separated)","Total Bytes (Formatted)","Shielding"
+26375472,"26,375,472","26.375 MB","X"
+$
+```
+
+### 1.3) Getting the origin request bandwidth for a single Service ID (Row Labels)
+```
+$ ./getBackendRequestBytes $API_KEY $SERVICE_ID 2019-01-01 2019-01-31 --labels rows
+Total Bytes (Integer): 26375472
+Total Bytes (Separated): 26,375,472
+Total Bytes (Formatted): 26.375 MB
+Shielding: X
+$
+```
+
 ### 2) Typical execution, i.e. getting and processing all Service ID's for a Customer ID
 ```
 $ ./getServices $API_KEY $CUSTOMER_ID > service_list.csv
 $ ./processSidFile $API_KEY 2019-01-01 2019-06-30 service_list.csv > origin_request_bw.csv
-$ cat origin_request_bw.csv
+$cat origin_request_bw.csv
 "Service ID","Service Name","Total Bytes","Abbrev. Total Bytes","Shielding?"
 "3Amd..................","Service A","0","0 B",""
 "2LlQ..................","Service B","136,328","136.328 kB",""
@@ -89,4 +115,4 @@ $
 ```
 
 ## To Do's
-1. Detect which Services currently have WAFs on them
+1. Indicate which Services currently have WAFs on them
